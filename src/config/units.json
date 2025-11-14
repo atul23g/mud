@@ -1,0 +1,18 @@
+{
+  "hemoglobin": "g/dL",
+  "mcv": "fL",
+  "mch": "pg",
+  "mchc": "g/dL",
+  "glucose": "mg/dL",
+  "chol": "mg/dL",
+  "trestbps": "mmHg",
+  "thalach": "bpm",
+  "oldpeak": "",
+  "blood_pressure": "mmHg",
+  "bmi": "kg/m²",
+  "age": "years",
+  "pregnancies": "count",
+  "skin_thickness": "mm",
+  "insulin": "mu U/ml",
+  "diabetes_pedigree_function": ""
+}

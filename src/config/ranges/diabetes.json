@@ -1,0 +1,40 @@
+{
+  "glucose": {
+    "ideal_min": 70,
+    "ideal_max": 99,
+    "weight": 3.0,
+    "transform": "z"
+  },
+  "hba1c": {
+    "ideal_min": 4.0,
+    "ideal_max": 5.6,
+    "weight": 4.0,
+    "transform": "z"
+  },
+  "bmi": {
+    "ideal_min": 18.5,
+    "ideal_max": 24.9,
+    "weight": 1.2,
+    "transform": "z"
+  },
+  "blood_pressure": {
+    "ideal_min": 80,
+    "ideal_max": 120,
+    "weight": 1.0,
+    "transform": "z"
+  },
+  "age": {
+    "ideal_min": 20,
+    "ideal_max": 60,
+    "weight": 0.8,
+    "transform": "z"
+  },
+  "insulin": {
+    "ideal_min": 16,
+    "ideal_max": 166,
+    "weight": 1.0,
+    "transform": "z"
+  }
+}
+
+

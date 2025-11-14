@@ -1,0 +1,28 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Venv and local tools
+venv/
+.env
+.env.*
+
+# Git
+.git/
+.gitignore
+
+# Tests and docs (not needed in image)
+tests/
+*.md
+docs/
+
+# Data and outputs (mount at runtime if needed)
+outputs/
+data/
+
+# OS/editor
+.DS_Store
+*.swp
+*.swo
