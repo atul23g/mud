@@ -1,35 +1,4 @@
-# Node / Vite
-web/node_modules/
-web/dist/
-web/.vite/
-web/.vercel/
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-.pytest_cache/
-venv/
-.venv/
-
-# Environment
 .env
-.env.*
+.env.production
+web/.env.example    
 web/.env
-web/.env.*
-
-# Data & outputs
-data/
-outputs/
-
-# OS / Editor
-.DS_Store
-*.swp
-*.swo
-.vscode/
-
-# Build artifacts
-htmlcov/
-coverage/
-dist/
-build/
