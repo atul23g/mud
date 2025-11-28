@@ -9,14 +9,14 @@ node_modules/
 .env.development
 .env.test
 .env.production
-web/.env.example
 web/.env
+web/.env.local
 
 # Build output
-/dist
-/build
-/.next
-/out
+dist/
+build/
+.next/
+out/
 
 # Debug logs
 npm-debug.log*
@@ -32,7 +32,7 @@ yarn-error.log*
 .idea/
 
 # Testing
-/coverage
+coverage/
 
 # Misc
 *.log
@@ -46,52 +46,17 @@ yarn-error.log*
 # TypeScript
 *.tsbuildinfo
 
-# Optional npm cache directory
-.npm
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-# Optional eslint cache
-.eslintcache
+# Agent
+.agent/
 
-# Optional REPL history
-.node_repl_history
-
-# Output of 'npm pack'
-*.tgz
-
-# Yarn Integrity file
-.yarn-integrity
-
-# dotenv environment variables file
-.env*.local
-
-# parcel-bundler cache (https://parceljs.org/)
-.parcel-cache/
-
-# Next.js build output
-.next/
-out/
-
-# Production
-build
-
-# Serverless directories
-.serverless/
-
-# FuseBox cache
-.fusebox/
-
-# DynamoDB Local files
-.dynamodb/
-
-# TernJS port file
-.tern-port
-
-# Stores VSCode versions used for testing VSCode extensions
-.vscode-test/
-
-# yarn v2
-.yarn/cache
-.yarn/unplugged
-.yarn/build-state.yml
-.yarn/install-state.gz
-.pnp.*
+# Project specific
+outputs/
+web/dist/
