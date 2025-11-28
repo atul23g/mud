@@ -6,7 +6,8 @@ install:
 
 # Setup everything
 setup:
-	./setup_complete.sh
+	chmod +x scripts/setup_prisma.sh
+	./scripts/setup_prisma.sh
 
 # Prisma commands
 prisma-generate:
@@ -19,8 +20,8 @@ prisma-push:
 	python -m prisma db push
 
 # Test database connection
-test-db:
-	python test_db_connection.py
+# test-db:
+# 	python test_db_connection.py
 
 # Train all models
 train:

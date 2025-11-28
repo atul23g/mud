@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-export const API_BASE = (import.meta as any).env.VITE_API_BASE || `${window.location.protocol}//${window.location.hostname}:8000`
+export const API_BASE = (import.meta as any).env.VITE_API_BASE || ""
 
 export type Task = 'heart' | 'diabetes' | 'parkinsons' | 'general'
 
@@ -33,6 +33,7 @@ export async function ingestReport(task: Task, file: File, token?: string) {
     task: string
     raw_text?: string
     out_of_range_fields?: string[]
+    all_extracted_values?: Record<string, any>
   }
 }
 

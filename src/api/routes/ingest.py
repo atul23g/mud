@@ -76,16 +76,65 @@ async def ingest_report(
 
         client = OpenAI()
         system = (
-            "You extract key medical values from plain text reports and return strict JSON. "
-            "Detect common labs and vitals relevant to heart and diabetes tasks. "
+            "You are a medical report extraction expert. Extract ALL medical test values from lab reports "
+            "and return them as strict JSON. Be flexible with naming conventions - different labs use different names. "
+            "Always normalize to canonical medical terms. "
             "Output only JSON with a 'pairs' array where each item has: "
-            "name (canonical snake_case), value (number), unit (string or ''), "
-            "confidence (0-1)."
+            "name (canonical snake_case), value (number or string), unit (string or ''), "
+            "confidence (0-1 based on how clear the value is)."
         )
+        
+        # Build comprehensive examples and aliases for common tests
+        task_specific_guidance = {
+            "heart": (
+                "For heart health, extract:\n"
+                "- Blood Pressure: 'trestbps' (systolic), 'blood_pressure_diastolic' (diastolic) - look for BP, Blood Pressure, Systolic BP\n"
+                "- Cholesterol: 'chol' (total), 'hdl', 'ldl', 'triglycerides' - may be labeled as Chol, Cholesterol, HDL-C, LDL-C, TG, VLDL\n"
+                "- Fasting Blood Sugar: 'fbs' - MAP 'Fasting Blood Sugar', 'FBS', 'Fasting Glucose', 'Blood Glucose (F)' -> 'fbs'\n"
+                "- Heart Rate: 'thalach' (max), 'resting_heart_rate' - look for HR, Heart Rate, Pulse, Max HR, Peak Heart Rate\n"
+                "- ECG Results: 'restecg' - look for ECG, EKG, Resting ECG\n"
+                "- Exercise metrics: 'oldpeak' (ST Depression), 'slope' (ST Slope) - look for ST Depression, ST Slope\n"
+                "- Other: 'ca' (calcium score/major vessels), 'thal' (thalassemia), 'exang' (exercise angina)\n"
+                "- Blood tests: 'hemoglobin' (Hb, HGB), 'wbc' (WBC, White Blood Cells), 'platelets' (PLT)\n"
+                "CRITICAL: After extracting these specific fields, extract ALL other medical values found in the report (e.g., Blood Count, Liver Function, Kidney Function, etc.) as well."
+            ),
+            "diabetes": (
+                "For diabetes, extract:\n"
+                "- Blood Glucose: 'Glucose' - CRITICAL: MAP 'Fasting Blood Sugar', 'FBS', 'RBS', 'Random Blood Sugar', 'Blood Glucose', 'Plasma Glucose' -> 'Glucose'\n"
+                "- Blood Pressure: 'BloodPressure' - systolic value, look for BP, Blood Pressure, Systolic BP\n"
+                "- BMI/Body: 'BMI' - Body Mass Index, Quetelet Index, or calculate from height/weight\n"
+                "- Insulin: 'Insulin' - CRITICAL: MAP 'Serum Insulin', 'Insulin Level', 'Fasting Insulin' -> 'Insulin'\n"
+                "- Skin: 'SkinThickness' - look for 'Skin Fold', 'Triceps Skin Fold'\n"
+                "- Pregnancies: 'Pregnancies' - look for 'Number of Pregnancies', 'Gravida', 'Para'\n"
+                "- Family History: 'DiabetesPedigreeFunction' - look for 'DPF', 'Diabetes Pedigree', 'Family History Score'\n"
+                "- Age: 'Age' - patient age in years\n"
+                "CRITICAL: After extracting these specific fields, extract ALL other medical values found in the report (e.g., Blood Count, Liver Function, Kidney Function, etc.) as well."
+            ),
+            "general": (
+                "Extract ALL medical values found. Use descriptive canonical names for:\n"
+                "- Blood counts: hemoglobin, wbc, rbc, platelets, hematocrit, neutrophils, lymphocytes\n"
+                "- Metabolic: glucose (MAP ALL GLUCOSE TERMS HERE), cholesterol, hdl, ldl, triglycerides, creatinine, urea, bilirubin\n"
+                "- Liver: sgpt, sgot, alp, albumin, globulin\n"
+                "- Thyroid: tsh, t3, t4\n"
+                "- Vitamins: vitamin_d, vitamin_b12, iron, ferritin\n"
+                "- Vitals: blood_pressure, heart_rate, temperature, weight, height, bmi, age"
+            )
+        }
+        
+        guidance = task_specific_guidance.get(task_enum.value, task_specific_guidance["general"])
+        
         user = (
-            f"Task: {task_enum.value}. Extract values from the following report text. "
-            f"Use canonical keys like 'trestbps', 'chol', 'fbs', 'thalach', 'oldpeak', 'slope', 'ca', 'thal' for heart; "
-            f"and 'Glucose', 'BloodPressure', 'BMI', 'Age' for diabetes. If general, include any meaningful labs.\n\n"
+            f"Task: {task_enum.value}\n\n"
+            f"{guidance}\n\n"
+            "IMPORTANT INSTRUCTIONS:\n"
+            "1. Look for values even if the naming is different (e.g., 'Haemoglobin' vs 'Hemoglobin', 'TC' vs 'Total Count')\n"
+            "2. Extract numeric values only - ignore reference ranges\n"
+            "3. If a value has multiple measurements, use the actual measured value (not the reference range)\n"
+            "4. Set confidence to 0.9+ if the value is clearly stated, 0.5-0.8 if uncertain\n"
+            "5. Include units exactly as shown (e.g., 'g/dL', 'mg/dL', 'mmHg', '%', 'cells/cumm')\n"
+            "6. For ratios or fractions, extract the decimal value\n"
+            "7. MAPPING RULE: Always map specific lab terms to the canonical keys listed above (e.g. 'FBS' -> 'Glucose', 'Serum Insulin' -> 'Insulin')\n\n"
+            "Report text (first 20000 chars):\n\n"
             + text[:20000]
         )
         try:
@@ -96,6 +145,7 @@ async def ingest_report(
                     {"role": "user", "content": user},
                 ],
                 response_format={"type": "json_object"},
+                temperature=0.1,  # Lower temperature for more consistent extraction
             )
             content_str = resp.choices[0].message.content or "{}"
             parsed_json = json.loads(content_str)
@@ -234,7 +284,9 @@ async def ingest_report(
             "task": task_enum.value,
             "extraction_methods": extraction_methods,
             "out_of_range_fields": out_of_range_fields,
-            "overall_confidence": 0.0
+            "out_of_range_fields": out_of_range_fields,
+            "overall_confidence": 0.0,
+            "all_extracted_values": kv
         }
     except HTTPException:
         raise

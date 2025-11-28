@@ -136,25 +136,25 @@ export default function Triage() {
       .trim()
 
     // Make the response more conversational and natural, like a real doctor
-    formatted = formatted
-      .replace(/^Analysis\n/i, 'Based on your medical information, I can see that:\n')
-      .replace(/^Recommendations\n/i, 'Here are my personalized recommendations for you:\n')
-      .replace(/^Next Steps\n/i, 'Here are the next steps I recommend:\n')
-      .replace(/^Important\n/i, 'It\'s important to note that:\n')
-      .replace(/^Summary\n/i, 'To summarize your situation:\n')
-      .replace(/^Conclusion\n/i, 'In conclusion:\n')
+    // formatted = formatted
+    //   .replace(/^Analysis\n/i, 'Based on your medical information, I can see that:\n')
+    //   .replace(/^Recommendations\n/i, 'Here are my personalized recommendations for you:\n')
+    //   .replace(/^Next Steps\n/i, 'Here are the next steps I recommend:\n')
+    //   .replace(/^Important\n/i, 'It\'s important to note that:\n')
+    //   .replace(/^Summary\n/i, 'To summarize your situation:\n')
+    //   .replace(/^Conclusion\n/i, 'In conclusion:\n')
 
     // Structure the response with professional section headers
     let result = formatted
 
     // Enhance section headers with professional styling
     result = result
-      .replace(/^Based on your medical information, I can see that:$/m, '<div style="font-weight: 600; font-size: 17px; color: #ffffff; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.3); letter-spacing: 0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); font-family: \'Inter\', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;">Based on your medical information, I can see that:</div>')
-      .replace(/^Here are my personalized recommendations for you:$/m, '<div style="font-weight: 600; font-size: 17px; color: #ffffff; margin: 16px 0 12px 0; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.3); letter-spacing: 0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); font-family: \'Inter\', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;">Here are my personalized recommendations for you:</div>')
-      .replace(/^Here are the next steps I recommend:$/m, '<div style="font-weight: 600; font-size: 17px; color: #ffffff; margin: 16px 0 12px 0; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.3); letter-spacing: 0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); font-family: \'Inter\', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;">Here are the next steps I recommend:</div>')
-      .replace(/^It\'s important to note that:$/m, '<div style="font-weight: 600; font-size: 17px; color: #ffffff; margin: 16px 0 12px 0; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.3); letter-spacing: 0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); font-family: \'Inter\', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;">It\'s important to note that:</div>')
-      .replace(/^To summarize your situation:$/m, '<div style="font-weight: 600; font-size: 17px; color: #ffffff; margin: 16px 0 12px 0; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.3); letter-spacing: 0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); font-family: \'Inter\', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;">To summarize your situation:</div>')
-      .replace(/^In conclusion:$/m, '<div style="font-weight: 600; font-size: 17px; color: #ffffff; margin: 16px 0 12px 0; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.3); letter-spacing: 0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); font-family: \'Inter\', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;">In conclusion:</div>')
+      // .replace(/^Based on your medical information, I can see that:$/m, '<div style="font-weight: 600; font-size: 17px; color: #ffffff; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.3); letter-spacing: 0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); font-family: \'Inter\', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;">Based on your medical information, I can see that:</div>')
+      // .replace(/^Here are my personalized recommendations for you:$/m, '<div style="font-weight: 600; font-size: 17px; color: #ffffff; margin: 16px 0 12px 0; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.3); letter-spacing: 0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); font-family: \'Inter\', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;">Here are my personalized recommendations for you:</div>')
+      // .replace(/^Here are the next steps I recommend:$/m, '<div style="font-weight: 600; font-size: 17px; color: #ffffff; margin: 16px 0 12px 0; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.3); letter-spacing: 0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); font-family: \'Inter\', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;">Here are the next steps I recommend:</div>')
+      // .replace(/^It\'s important to note that:$/m, '<div style="font-weight: 600; font-size: 17px; color: #ffffff; margin: 16px 0 12px 0; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.3); letter-spacing: 0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); font-family: \'Inter\', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;">It\'s important to note that:</div>')
+      // .replace(/^To summarize your situation:$/m, '<div style="font-weight: 600; font-size: 17px; color: #ffffff; margin: 16px 0 12px 0; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.3); letter-spacing: 0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); font-family: \'Inter\', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;">To summarize your situation:</div>')
+      // .replace(/^In conclusion:$/m, '<div style="font-weight: 600; font-size: 17px; color: #ffffff; margin: 16px 0 12px 0; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.3); letter-spacing: 0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); font-family: \'Inter\', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;">In conclusion:</div>')
 
     // Add proper spacing and formatting for better readability
     result = result
@@ -337,20 +337,66 @@ export default function Triage() {
           }
         `
       }} />
-      <div className="card" style={{marginBottom:16}}>
-        <div style={{fontSize:32, fontWeight:800, lineHeight:1.15}}>Dr. Intelligence</div>
-        <div style={{color:'#6b7280', marginTop:6}}>Your AI Health Assistant providing professional medical guidance</div>
-        {latest && (
-          <div style={{marginTop:10, display:'flex', gap:12, flexWrap:'wrap'}}>
-            <div className="badge">Analysis: {latest.task}</div>
-            <div className="badge">Health Score: {latest.prediction?.health_score?.toFixed?.(2)}/100</div>
-            {model && <div className="badge">AI Model: {model}</div>}
-            {Array.isArray(latest.highlights) && latest.highlights.length > 0 && (
-              <div className="badge">Abnormal: {latest.highlights.slice(0,4).join(', ')}</div>
-            )}
+      <div 
+        className="card relative overflow-hidden group hover:shadow-2xl hover:shadow-blue-500/10 transition-all duration-500" 
+        style={{ 
+          marginBottom: 24,
+          background: "linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9))",
+          backdropFilter: "blur(20px)",
+          border: "1px solid rgba(255, 255, 255, 0.08)",
+          borderRadius: 24,
+          padding: 32,
+          boxShadow: "0 20px 40px -10px rgba(0, 0, 0, 0.4)"
+        }}
+      >
+        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none group-hover:bg-blue-500/20 transition-colors duration-500"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none group-hover:bg-purple-500/20 transition-colors duration-500"></div>
+        
+        <div className="relative z-10">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/25 ring-1 ring-white/10">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-white tracking-tight mb-1">Dr. Intelligence</h1>
+              <div className="flex items-center gap-2 text-blue-400 text-sm font-medium">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                </span>
+                AI Health Assistant
+              </div>
+            </div>
           </div>
-        )}
-        {!latest && <div className="alert" style={{marginTop:8}}>No medical data available. Please upload a report or enter manual data first.</div>}
+          
+          <p className="text-gray-400 text-lg leading-relaxed max-w-2xl mb-6">
+            Your professional medical guide. Ask questions about your reports, symptoms, or health goals.
+          </p>
+
+          {latest && (
+            <div className="flex flex-wrap gap-3">
+              <div className="px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 text-sm font-medium flex items-center gap-2">
+                <span>📊</span> Analysis: {latest.task}
+              </div>
+              <div className="px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 text-sm font-medium flex items-center gap-2">
+                <span>❤️</span> Health Score: {latest.prediction?.health_score?.toFixed?.(1)}/100
+              </div>
+              {model && (
+                <div className="px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-sm font-medium flex items-center gap-2">
+                  <span>🤖</span> {model}
+                </div>
+              )}
+            </div>
+          )}
+          {!latest && (
+            <div className="mt-4 p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-200 flex items-center gap-3">
+              <span>⚠️</span>
+              No medical data available. Please upload a report or enter manual data first.
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="card">
@@ -387,15 +433,21 @@ export default function Triage() {
               {/* Message Bubble */}
               <div style={{
                 maxWidth: '80%',
-                padding: '16px 20px',
-                borderRadius: m.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                backgroundColor: m.role === 'user' ? '#3b82f6' : '#1e40af',
+                padding: '20px 24px',
+                borderRadius: m.role === 'user' ? '24px 24px 4px 24px' : '24px 24px 24px 4px',
+                background: m.role === 'user' 
+                  ? 'linear-gradient(135deg, #3b82f6, #2563eb)' 
+                  : 'rgba(30, 41, 59, 0.7)',
                 color: '#ffffff',
-                fontSize: 14,
+                fontSize: 15,
                 lineHeight: 1.6,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                backdropFilter: 'blur(10px)',
-                border: '1px solid rgba(255,255,255,0.1)'
+                boxShadow: m.role === 'user' 
+                  ? '0 4px 12px rgba(37, 99, 235, 0.3)' 
+                  : '0 4px 12px rgba(0, 0, 0, 0.2)',
+                backdropFilter: 'blur(12px)',
+                border: m.role === 'user' 
+                  ? '1px solid rgba(255, 255, 255, 0.2)' 
+                  : '1px solid rgba(255, 255, 255, 0.08)'
               }}>
                 <div style={{whiteSpace: 'pre-line', wordBreak: 'break-word', fontFamily: 'Inter, system-ui, sans-serif', lineHeight: '1.6'}}>
                   <div 

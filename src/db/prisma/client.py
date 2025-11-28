@@ -85,7 +85,7 @@ __all__ = (
 
 log: logging.Logger = logging.getLogger(__name__)
 
-SCHEMA_PATH = Path('/Users/atulyakumar/Desktop/Capstone copy 4/prisma/schema.prisma')
+SCHEMA_PATH = Path('/Users/atulyakumar/Desktop/Capstone copy 6/prisma/schema.prisma')
 PACKAGED_SCHEMA_PATH = Path(__file__).parent.joinpath('schema.prisma')
 ENGINE_TYPE: EngineType = EngineType.binary
 BINARY_PATHS = model_parse(BinaryPaths, {'queryEngine': {'darwin-arm64': '/Users/atulyakumar/.cache/prisma-python/binaries/5.11.0/efd2449663b3d73d637ea1fd226bafbcf45b3102/node_modules/prisma/query-engine-darwin-arm64'}, 'introspectionEngine': {}, 'migrationEngine': {}, 'libqueryEngine': {}, 'prismaFmt': {}})

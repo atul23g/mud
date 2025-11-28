@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { ingestReport, predictWithFeatures, Task } from "../lib/api";
 import { getAccessToken } from "../lib/auth";
 import HealthScoreChart from "../components/HealthScoreChart";
+import { AlertCircle } from "lucide-react";
 
 // Helper functions for user-friendly labels
 function getUserFriendlyLabel(key: string): string {
@@ -228,6 +229,71 @@ function getUserFriendlySymptom(key: string): string {
   );
 }
 
+function getDescriptionForKey(key: string): string {
+  const descriptions: Record<string, string> = {
+    // Heart
+    age: "Age of the patient.",
+    trestbps: "Resting blood pressure (mm Hg). High values indicate hypertension.",
+    chol: "Serum cholesterol (mg/dl). High levels increase heart disease risk.",
+    fbs: "Fasting blood sugar. > 120 mg/dl suggests diabetes.",
+    restecg: "Resting electrocardiographic results.",
+    thalach: "Maximum heart rate achieved during exercise.",
+    exang: "Angina induced by exercise (Yes/No).",
+    oldpeak: "ST depression induced by exercise relative to rest.",
+    slope: "Slope of the peak exercise ST segment.",
+    ca: "Number of major vessels (0-3) colored by fluoroscopy.",
+    thal: "Thalassemia status (Normal, Fixed Defect, Reversible Defect).",
+    
+    // Diabetes
+    Pregnancies: "Number of times pregnant.",
+    Glucose: "Plasma glucose concentration (2 hours in an oral glucose tolerance test).",
+    BloodPressure: "Diastolic blood pressure (mm Hg).",
+    SkinThickness: "Triceps skin fold thickness (mm).",
+    Insulin: "2-Hour serum insulin (mu U/ml).",
+    BMI: "Body mass index (weight in kg/(height in m)^2).",
+    DiabetesPedigreeFunction: "Diabetes pedigree function (genetic score).",
+    Age: "Age of the patient.",
+
+    // General / Common
+    hemoglobin: "Protein in red blood cells that carries oxygen.",
+    wbc: "White blood cell count. High values may indicate infection.",
+    platelets: "Platelet count. Important for blood clotting.",
+    creatinine: "Waste product filtered by kidneys. High levels may indicate kidney issues.",
+    alt: "Liver enzyme. High levels may indicate liver damage.",
+    ast: "Liver enzyme. High levels may indicate liver damage.",
+    tsh: "Thyroid stimulating hormone. Regulates thyroid function.",
+  };
+  
+  return descriptions[key] || "Medical indicator extracted from report.";
+}
+
+function getReferenceRange(key: string, task: string): { min: number; max: number } | null {
+  const ranges: Record<string, Record<string, { min: number; max: number }>> = {
+    diabetes: {
+      Glucose: { min: 70, max: 99 },
+      glucose: { min: 70, max: 99 },
+      BloodPressure: { min: 80, max: 120 },
+      blood_pressure: { min: 80, max: 120 },
+      Insulin: { min: 16, max: 166 },
+      insulin: { min: 16, max: 166 },
+      BMI: { min: 18.5, max: 24.9 },
+      bmi: { min: 18.5, max: 24.9 },
+    },
+    heart: {
+      trestbps: { min: 90, max: 120 },
+      chol: { min: 125, max: 200 },
+      cholesterol: { min: 125, max: 200 },
+      thalach: { min: 100, max: 180 },
+    },
+  };
+
+  const taskRanges = ranges[task];
+  if (!taskRanges) return null;
+  
+  return taskRanges[key] || null;
+}
+
+
 export default function Upload() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -247,9 +313,8 @@ export default function Upload() {
   >({});
   const [rawText, setRawText] = useState<string>("");
   const [outOfRange, setOutOfRange] = useState<string[]>([]);
+  const [allExtracted, setAllExtracted] = useState<Record<string, any> | null>(null);
   const [showExtractedValues, setShowExtractedValues] = useState(false);
-  const [requireConfirmation, setRequireConfirmation] = useState(true);
-  const [confirmedExtracted, setConfirmedExtracted] = useState(false);
   // AI Doctor moved to its own page (Triage). Here we just show a CTA.
   // Lifestyle & Symptoms
   const [lifestyle, setLifestyle] = useState({
@@ -277,18 +342,6 @@ export default function Upload() {
 
   const haveIngest = useMemo(() => !!reportId, [reportId]);
   const havePred = useMemo(() => !!result?.pred, [result]);
-
-  // Handle confirmation of extracted values
-  const confirmExtractedValues = () => {
-    setConfirmedExtracted(true);
-    setShowExtractedValues(false);
-  };
-
-  // Handle re-extraction if user wants to review again
-  const reviewExtractedValues = () => {
-    setConfirmedExtracted(false);
-    setShowExtractedValues(true);
-  };
 
   // Simple validation: require missing fields to be filled; numeric check for known numeric fields per task
   const numericFieldsByTask: Record<Task, Set<string>> = {
@@ -441,16 +494,37 @@ export default function Upload() {
     if (report) {
       setTask((report.task || "general") as Task);
       setReportId(report.id);
-      setFeatures(report.extracted || {});
+      
+      const feats = report.extracted || report.features || {};
+      setFeatures(feats);
       setMissing(report.missingFields || []);
-      setExtractedMeta(report.extractedMeta || {});
-      setRawText(report.rawOCR?.text || "");
-      const highlights = Object.entries(report.extractedMeta || {})
+      
+      // Backfill extractedMeta if missing (e.g. from localStorage) so fields show up
+      let meta = report.extractedMeta || {};
+      if (Object.keys(meta).length === 0 && Object.keys(feats).length > 0) {
+        const newMeta: any = {};
+        Object.keys(feats).forEach((k) => {
+          newMeta[k] = { value: feats[k], confidence: 1.0, unit: null };
+        });
+        meta = newMeta;
+      }
+      setExtractedMeta(meta);
+
+      setRawText(report.rawOCR?.text || report.extracted_text || "");
+      
+      // Handle highlights/out of range
+      const highlights = report.highlights || Object.entries(report.extractedMeta || {})
         .filter(([_, v]: any) => v?.out_of_range)
         .map(([k]) => k as string);
       setOutOfRange(highlights);
+      
       setShowExtractedValues(true);
-      setConfirmedExtracted(false);
+
+      // If prediction exists, set it to show results immediately
+      if (report.prediction) {
+        setResult({ pred: report.prediction });
+        setShowExtractedValues(false); 
+      }
     }
   }, [location]);
 
@@ -473,9 +547,9 @@ export default function Upload() {
       setExtractedMeta(ingest.extracted_meta || {});
       setRawText(ingest.raw_text || "");
       setOutOfRange(ingest.out_of_range_fields || []);
-      // Reset confirmation when new extraction happens
-      setConfirmedExtracted(!requireConfirmation); // Auto-confirm if confirmation is disabled
-      setShowExtractedValues(requireConfirmation); // Show values if confirmation is required
+      setOutOfRange(ingest.out_of_range_fields || []);
+      
+      setShowExtractedValues(false); // Hide values by default
       // In general mode, stash context immediately for Triage
       if (task === "general") {
         localStorage.setItem(
@@ -502,14 +576,7 @@ export default function Upload() {
   const onAnalyze = async () => {
     if (!haveIngest) return;
 
-    // Check if confirmation is required and not confirmed
-    if (requireConfirmation && !confirmedExtracted) {
-      setShowExtractedValues(true);
-      setError(
-        "Please review and confirm the extracted values before analysis."
-      );
-      return;
-    }
+
 
     setLoading(true);
     setError(null);
@@ -569,71 +636,116 @@ export default function Upload() {
 
   return (
     <>
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div
-          style={{
-            fontSize: 32,
-            fontWeight: 800,
-            lineHeight: 1.2,
-            marginBottom: 8,
-          }}
-        >
-          🤖 AI Health Assistant
-        </div>
-        <div
-          style={{
-            color: "var(--text-secondary)",
-            marginBottom: 16,
-            fontSize: 16,
-          }}
-        >
-          Get personalized health insights and advice from our AI assistant. Ask
-          questions about your health in plain language.
-        </div>
-        <div style={{ marginTop: 16 }}>
+      <div 
+        className="card relative overflow-hidden group hover:shadow-2xl hover:shadow-blue-500/10 transition-all duration-500" 
+        style={{ 
+          marginBottom: 32,
+          background: "linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9))",
+          backdropFilter: "blur(20px)",
+          border: "1px solid rgba(255, 255, 255, 0.08)",
+          borderRadius: 24,
+          padding: 32,
+          boxShadow: "0 20px 40px -10px rgba(0, 0, 0, 0.4)"
+        }}
+      >
+        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none group-hover:bg-blue-500/20 transition-colors duration-500"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none group-hover:bg-purple-500/20 transition-colors duration-500"></div>
+        
+        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
+          <div className="flex-1">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/25 ring-1 ring-white/10">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-3xl font-bold text-white tracking-tight mb-1">
+                  AI Health Assistant
+                </h2>
+                <div className="flex items-center gap-2 text-blue-400 text-sm font-medium">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                  </span>
+                  Ready to assist
+                </div>
+              </div>
+            </div>
+            <p className="text-gray-400 text-lg leading-relaxed max-w-2xl">
+              Get personalized health insights and advice. Ask questions about your reports and health in plain language.
+            </p>
+          </div>
+
           <button
-            className="btn btn-success"
-            onClick={() =>
-              navigate("/triage", { state: { reportData: result } })
-            }
+            onClick={() => navigate("/triage", { state: { reportData: result } })}
+            className="group relative inline-flex items-center gap-3 px-8 py-4 bg-white text-slate-900 rounded-2xl font-bold text-lg transition-all duration-300 hover:bg-blue-50 hover:scale-105 hover:shadow-xl hover:shadow-blue-500/20 focus:outline-none focus:ring-2 focus:ring-white/50 active:scale-95"
           >
-            <span style={{ marginRight: 8 }}>💬</span>
-            Start Health Consultation
+            <span>Start Consultation</span>
+            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+              <svg className="w-4 h-4 text-blue-600 transition-transform duration-300 group-hover:translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+            </div>
           </button>
         </div>
       </div>
 
-      <div className="card">
+      <div className="card" style={{ 
+        background: "rgba(30, 41, 59, 0.7)",
+        backdropFilter: "blur(20px)",
+        border: "1px solid rgba(255, 255, 255, 0.1)",
+        borderRadius: 24,
+        padding: 32,
+        boxShadow: "0 20px 40px -10px rgba(0, 0, 0, 0.3)"
+      }}>
         <div
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            marginBottom: 24,
+            marginBottom: 32,
           }}
         >
-          <h2 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>
-            📋 Upload Medical Report
-          </h2>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 32, fontWeight: 800, background: "linear-gradient(to right, #60a5fa, #a855f7)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+              Upload Medical Report
+            </h2>
+            <p style={{ margin: "8px 0 0", color: "var(--text-secondary)", fontSize: 16 }}>
+              Upload your lab results for instant AI analysis
+            </p>
+          </div>
+          
           {/* Enhanced 3-step indicator */}
           {(() => {
             const step = !haveIngest ? 1 : !havePred ? 2 : 3;
-            const dot = (active: boolean, label: string) => (
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            const dot = (active: boolean, label: string, num: number) => (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
                 <div
                   style={{
-                    width: 12,
-                    height: 12,
-                    borderRadius: 999,
-                    background: active ? "var(--secondary)" : "var(--border)",
+                    width: 32,
+                    height: 32,
+                    borderRadius: "50%",
+                    background: active ? "linear-gradient(135deg, #3b82f6, #8b5cf6)" : "rgba(255,255,255,0.05)",
+                    border: active ? "none" : "1px solid rgba(255,255,255,0.1)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: active ? "white" : "var(--text-muted)",
+                    fontWeight: 700,
+                    fontSize: 14,
+                    boxShadow: active ? "0 4px 12px rgba(59, 130, 246, 0.4)" : "none",
                     transition: "all 0.3s ease",
                   }}
-                />
+                >
+                  {step > num ? "✓" : num}
+                </div>
                 <span
                   style={{
-                    fontSize: 14,
+                    fontSize: 12,
                     color: active ? "var(--text-primary)" : "var(--text-muted)",
                     fontWeight: active ? 600 : 400,
+                    letterSpacing: "0.02em"
                   }}
                 >
                   {label}
@@ -641,101 +753,134 @@ export default function Upload() {
               </div>
             );
             return (
-              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                {dot(step >= 1, "Upload")}
-                <div
-                  style={{
-                    width: 32,
-                    height: 2,
-                    background: "var(--border)",
-                    borderRadius: 1,
-                  }}
-                />
-                {dot(step >= 2, "Review Data")}
-                <div
-                  style={{
-                    width: 32,
-                    height: 2,
-                    background: "var(--border)",
-                    borderRadius: 1,
-                  }}
-                />
-                {dot(step >= 3, "Get Results")}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                {dot(step >= 1, "Upload", 1)}
+                <div style={{ width: 40, height: 2, background: step >= 2 ? "var(--primary)" : "rgba(255,255,255,0.1)", marginTop: 15, borderRadius: 1 }} />
+                {dot(step >= 2, "Review", 2)}
+                <div style={{ width: 40, height: 2, background: step >= 3 ? "var(--primary)" : "rgba(255,255,255,0.1)", marginTop: 15, borderRadius: 1 }} />
+                {dot(step >= 3, "Results", 3)}
               </div>
             );
           })()}
         </div>
 
-        <div className="row" style={{ marginBottom: 24 }}>
-          <div className="col">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+          <div className="col-span-1">
             <label
-              style={{ fontWeight: 600, marginBottom: 8, display: "block" }}
+              style={{ fontWeight: 600, marginBottom: 12, display: "block", color: "var(--text-primary)", fontSize: 15 }}
             >
-              Health Focus Area
+              Select Health Focus
             </label>
-            <select
-              className="input"
-              value={task}
-              onChange={(e) => setTask(e.target.value as Task)}
-            >
-              <option value="general">🩺 General Health Assessment</option>
-              <option value="heart">❤️ Heart Health & Cardiovascular</option>
-              <option value="diabetes">🍯 Diabetes & Blood Sugar</option>
-              <option value="parkinsons">🧠 Neurological Health</option>
-            </select>
+            <div className="relative group">
+              <select
+                className="input w-full appearance-none cursor-pointer"
+                style={{ 
+                  height: 56, 
+                  padding: "0 20px",
+                  borderRadius: 16,
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  fontSize: 16,
+                  transition: "all 0.2s ease"
+                }}
+                value={task}
+                onChange={(e) => setTask(e.target.value as Task)}
+              >
+                <option value="general">🩺 General Health Assessment</option>
+                <option value="heart">❤️ Heart Health & Cardiovascular</option>
+                <option value="diabetes">🩸 Diabetes & Blood Sugar</option>
+                <option value="parkinsons">🧠 Neurological Health</option>
+              </select>
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+              </div>
+            </div>
             <div
-              style={{ marginTop: 8, fontSize: 14, color: "var(--text-muted)" }}
+              style={{ marginTop: 12, fontSize: 14, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 8, padding: "12px", background: "rgba(59, 130, 246, 0.05)", borderRadius: 12, border: "1px solid rgba(59, 130, 246, 0.1)" }}
             >
-              {task === "general" &&
-                "Comprehensive health analysis across all areas"}
-              {task === "heart" &&
-                "Focus on heart disease risk and cardiovascular health"}
-              {task === "diabetes" &&
-                "Diabetes risk assessment and blood sugar analysis"}
+              <span style={{ fontSize: 18 }}>ℹ️</span>
+              {task === "general" && "Comprehensive health analysis across all areas"}
+              {task === "heart" && "Focus on heart disease risk and cardiovascular health"}
+              {task === "diabetes" && "Diabetes risk assessment and blood sugar analysis"}
               {task === "parkinsons" && "Neurological condition assessment"}
             </div>
           </div>
-          <div className="col">
+
+          <div className="col-span-1">
             <label
-              style={{ fontWeight: 600, marginBottom: 8, display: "block" }}
+              style={{ fontWeight: 600, marginBottom: 12, display: "block", color: "var(--text-primary)", fontSize: 15 }}
             >
-              Medical Report (PDF)
+              Upload PDF Report
             </label>
-            <input
-              className="input"
-              type="file"
-              accept=".pdf,application/pdf"
-              onChange={(e) => {
-                const f = e.target.files?.[0] || null;
-                if (f && f.type && f.type !== "application/pdf") {
-                  setError("Please upload a PDF file (.pdf)");
-                  setFile(null);
-                  return;
-                }
-                setFile(f);
+            <div 
+              className="relative group cursor-pointer"
+              style={{
+                border: "2px dashed rgba(255,255,255,0.15)",
+                borderRadius: 20,
+                padding: "32px 24px",
+                textAlign: "center",
+                background: "rgba(255,255,255,0.02)",
+                transition: "all 0.2s ease"
               }}
-            />
-            <div
-              style={{ marginTop: 8, fontSize: 14, color: "var(--text-muted)" }}
             >
-              Upload your lab reports, blood tests, or medical documents
+              <input
+                type="file"
+                accept=".pdf,application/pdf"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] || null;
+                  if (f && f.type && f.type !== "application/pdf") {
+                    setError("Please upload a PDF file (.pdf)");
+                    setFile(null);
+                    return;
+                  }
+                  setFile(f);
+                }}
+              />
+              <div className="pointer-events-none">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-400 group-hover:scale-110 transition-transform duration-200">
+                  {file ? (
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                  ) : (
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                  )}
+                </div>
+                <p style={{ margin: "0 0 4px", fontWeight: 600, color: file ? "var(--primary-light)" : "var(--text-primary)" }}>
+                  {file ? file.name : "Click to upload or drag and drop"}
+                </p>
+                <p style={{ margin: 0, fontSize: 13, color: "var(--text-muted)" }}>
+                  {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "PDF files only (max 10MB)"}
+                </p>
+              </div>
             </div>
           </div>
         </div>
 
-        <div style={{ marginTop: 16 }}>
+        <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
           <button
             className={`btn btn-primary ${loading ? "btn-loading" : ""}`}
             disabled={!file || loading}
             onClick={onSubmit}
+            style={{
+              padding: "14px 32px",
+              fontSize: 16,
+              borderRadius: 12,
+              background: !file ? "rgba(255,255,255,0.1)" : "linear-gradient(135deg, #3b82f6, #8b5cf6)",
+              border: "none",
+              opacity: !file && !loading ? 0.5 : 1,
+              boxShadow: file ? "0 8px 20px -4px rgba(59, 130, 246, 0.5)" : "none",
+              transition: "all 0.3s ease",
+              transform: file ? "translateY(0)" : "none",
+            }}
           >
             {loading ? (
               <span>
-                <span className="loading-spinner"></span>Uploading &
-                Analyzing...
+                <span className="loading-spinner"></span>Analyzing...
               </span>
             ) : (
-              <span>📤 Upload & Analyze Report</span>
+              <span className="flex items-center gap-2">
+                📤 Analyze Report
+              </span>
             )}
           </button>
         </div>
@@ -746,42 +891,7 @@ export default function Upload() {
           </div>
         )}
 
-        {/* Confirmation Settings */}
-        <div
-          style={{
-            marginTop: 16,
-            padding: 12,
-            background: "var(--surface)",
-            borderRadius: 8,
-            border: "1px solid var(--border)",
-          }}
-        >
-          <label
-            style={{
-              fontWeight: 600,
-              marginBottom: 8,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              cursor: "pointer",
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={requireConfirmation}
-              onChange={(e) => setRequireConfirmation(e.target.checked)}
-              style={{ width: "auto", margin: 0 }}
-            />
-            Require value confirmation
-          </label>
-          <div
-            style={{ fontSize: 14, color: "var(--text-muted)", marginLeft: 24 }}
-          >
-            {requireConfirmation
-              ? "Review extracted values before analysis"
-              : "Skip confirmation step"}
-          </div>
-        </div>
+
 
         {/* Extracted values summary and confidence-driven review */}
         {haveIngest && (
@@ -794,84 +904,22 @@ export default function Upload() {
               </div>
             )}
 
-            {task !== "general" && !!optionalConfirmationKeys.length && (
+            {task !== "general" && (
               <div style={{ marginTop: 24 }}>
-                <div
-                  style={{
-                    fontWeight: 700,
-                    fontSize: 18,
-                    marginBottom: 12,
-                    color: "var(--text-primary)",
-                  }}
-                >
-                  🔍 Optional Confirmation Needed
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-1 h-6 bg-blue-500 rounded-full"></div>
+                  <h3 className="text-lg font-bold text-white">Required Information</h3>
                 </div>
-                <div className="row" style={{ marginTop: 12 }}>
-                  {optionalConfirmationKeys.sort().map((k) => {
-                    const meta = extractedMeta[k] || {};
-                    return (
-                      <div className="col" key={k}>
-                        <label
-                          style={{
-                            fontWeight: 600,
-                            marginBottom: 4,
-                            display: "block",
-                          }}
-                        >
-                          {getUserFriendlyLabel(k)}
-                          {meta.confidence && (
-                            <span
-                              style={{
-                                fontSize: 12,
-                                color: "var(--text-muted)",
-                                marginLeft: 4,
-                              }}
-                            >
-                              ({(meta.confidence * 100).toFixed(0)}% confidence)
-                            </span>
-                          )}
-                        </label>
-                        <input
-                          className="input"
-                          type="text"
-                          value={features[k] ?? ""}
-                          onChange={(e) =>
-                            setFeatures((p) => ({ ...p, [k]: e.target.value }))
-                          }
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {task !== "general" && !!requiredKeys.length && (
-              <div style={{ marginTop: 24 }}>
-                <div
-                  style={{
-                    fontWeight: 700,
-                    fontSize: 18,
-                    marginBottom: 12,
-                    color: "var(--text-primary)",
-                  }}
-                >
-                  ⚠️ Required Information Missing
-                </div>
-                <div className="row" style={{ marginTop: 12 }}>
-                  {requiredKeys.map((k) => (
-                    <div className="col" key={k}>
-                      <label
-                        style={{
-                          fontWeight: 600,
-                          marginBottom: 4,
-                          display: "block",
-                        }}
-                      >
-                        {getUserFriendlyLabel(k)} *
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {[...optionalConfirmationKeys, ...requiredKeys].sort().map((k) => (
+                    <div key={k} className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4 hover:border-blue-500/30 transition-colors">
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        {getUserFriendlyLabel(k)}
+                        {requiredKeys.includes(k) && <span className="text-red-400 ml-1">*</span>}
                       </label>
                       <input
-                        className="input"
+                        className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
                         type="text"
                         value={features[k] ?? ""}
                         onChange={(e) =>
@@ -889,13 +937,16 @@ export default function Upload() {
                     </div>
                   ))}
                 </div>
+                
                 {invalidMissing.length > 0 && (
-                  <div className="alert alert-error" style={{ marginTop: 16 }}>
-                    ⚠️ Please provide valid values for:{" "}
-                    {invalidMissing
-                      .map((k) => getUserFriendlyLabel(k))
-                      .join(", ")}
-                    .
+                  <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400">
+                    <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                    <span>
+                      Please provide valid values for:{" "}
+                      {invalidMissing
+                        .map((k) => getUserFriendlyLabel(k))
+                        .join(", ")}
+                    </span>
                   </div>
                 )}
               </div>
@@ -903,194 +954,216 @@ export default function Upload() {
 
             {/* Lifestyle & Symptoms */}
             <div style={{ marginTop: 32 }}>
-              <details open>
+              <details 
+                open 
+                className="group"
+                style={{ marginBottom: 24 }}
+              >
                 <summary
                   style={{
                     fontSize: 18,
                     fontWeight: 700,
                     cursor: "pointer",
                     marginBottom: 16,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "12px 16px",
+                    background: "var(--surface)",
+                    borderRadius: "8px",
+                    border: "1px solid var(--border)",
+                    transition: "all 0.2s ease"
+                  }}
+                  className="hover:border-blue-500/50 hover:bg-slate-800/50"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="transform transition-transform duration-200 group-open:rotate-180">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M6 9l6 6 6-6"/>
+                      </svg>
+                    </div>
+                    <span>Lifestyle Factors</span>
+                  </div>
+                  <span style={{ fontSize: 14, color: "var(--text-secondary)", fontWeight: 400 }}>
+                    Optional • Improves AI Accuracy
+                  </span>
+                </summary>
+                
+                <div 
+                  style={{
+                    background: "rgba(30, 41, 59, 0.4)",
+                    backdropFilter: "blur(12px)",
+                    borderRadius: 12,
+                    padding: 24,
+                    border: "1px solid rgba(255, 255, 255, 0.08)",
+                    boxShadow: "0 4px 24px -1px rgba(0, 0, 0, 0.2)"
                   }}
                 >
-                  🌟 Lifestyle Factors (Improves AI Recommendations)
-                </summary>
-                <div className="row" style={{ marginTop: 16 }}>
-                  <div className="col">
-                    <label
-                      style={{
-                        fontWeight: 600,
-                        marginBottom: 4,
-                        display: "block",
-                      }}
-                    >
-                      Smoking Status
-                    </label>
-                    <select
-                      className="input"
-                      value={lifestyle.smoking}
-                      onChange={(e) =>
-                        setLifestyle((s) => ({ ...s, smoking: e.target.value }))
-                      }
-                    >
-                      <option value="no">🚭 Non-smoker</option>
-                      <option value="yes">🚬 Smoker</option>
-                    </select>
-                  </div>
-                  <div className="col">
-                    <label
-                      style={{
-                        fontWeight: 600,
-                        marginBottom: 4,
-                        display: "block",
-                      }}
-                    >
-                      Alcohol Consumption
-                    </label>
-                    <select
-                      className="input"
-                      value={lifestyle.alcohol}
-                      onChange={(e) =>
-                        setLifestyle((s) => ({ ...s, alcohol: e.target.value }))
-                      }
-                    >
-                      <option value="no">🥤 No alcohol</option>
-                      <option value="yes">🍷 Occasional/Regular</option>
-                    </select>
-                  </div>
-                  <div className="col">
-                    <label
-                      style={{
-                        fontWeight: 600,
-                        marginBottom: 4,
-                        display: "block",
-                      }}
-                    >
-                      Exercise Level
-                    </label>
-                    <select
-                      className="input"
-                      value={lifestyle.exercise}
-                      onChange={(e) =>
-                        setLifestyle((s) => ({
-                          ...s,
-                          exercise: e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="low">🚶‍♂️ Low (Rarely exercise)</option>
-                      <option value="medium">🏃‍♂️ Medium (2-3x per week)</option>
-                      <option value="high">💪 High (4+ times per week)</option>
-                    </select>
-                  </div>
-                  <div className="col">
-                    <label
-                      style={{
-                        fontWeight: 600,
-                        marginBottom: 4,
-                        display: "block",
-                      }}
-                    >
-                      Diet Type
-                    </label>
-                    <select
-                      className="input"
-                      value={lifestyle.diet}
-                      onChange={(e) =>
-                        setLifestyle((s) => ({ ...s, diet: e.target.value }))
-                      }
-                    >
-                      <option value="balanced">⚖️ Balanced diet</option>
-                      <option value="veg">🥗 Vegetarian</option>
-                      <option value="non-veg">🍖 Non-vegetarian</option>
-                      <option value="high-fat">🧈 High-fat diet</option>
-                      <option value="junk">🍔 Mostly processed foods</option>
-                    </select>
-                  </div>
-                  <div className="col">
-                    <label
-                      style={{
-                        fontWeight: 600,
-                        marginBottom: 4,
-                        display: "block",
-                      }}
-                    >
-                      Stress Level
-                    </label>
-                    <select
-                      className="input"
-                      value={lifestyle.stress_level}
-                      onChange={(e) =>
-                        setLifestyle((s) => ({
-                          ...s,
-                          stress_level: e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="low">😌 Low stress</option>
-                      <option value="medium">😐 Moderate stress</option>
-                      <option value="high">😰 High stress</option>
-                    </select>
-                  </div>
-                  <div className="col">
-                    <label
-                      style={{
-                        fontWeight: 600,
-                        marginBottom: 4,
-                        display: "block",
-                      }}
-                    >
-                      Sleep Duration
-                    </label>
-                    <input
-                      className="input"
-                      type="number"
-                      min={0}
-                      max={24}
-                      value={lifestyle.sleep_hours}
-                      onChange={(e) =>
-                        setLifestyle((s) => ({
-                          ...s,
-                          sleep_hours: Number(e.target.value || 0),
-                        }))
-                      }
-                    />
-                    <div
-                      style={{
-                        fontSize: 12,
-                        color: "var(--text-muted)",
-                        marginTop: 4,
-                      }}
-                    >
-                      Hours per night
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="col-span-1">
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Smoking Status
+                      </label>
+                      <select
+                        className="input w-full"
+                        style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.1)" }}
+                        value={lifestyle.smoking}
+                        onChange={(e) =>
+                          setLifestyle((s) => ({ ...s, smoking: e.target.value }))
+                        }
+                      >
+                        <option value="no">Non-smoker</option>
+                        <option value="yes">Smoker</option>
+                      </select>
+                    </div>
+                    <div className="col-span-1">
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Alcohol Consumption
+                      </label>
+                      <select
+                        className="input w-full"
+                        style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.1)" }}
+                        value={lifestyle.alcohol}
+                        onChange={(e) =>
+                          setLifestyle((s) => ({ ...s, alcohol: e.target.value }))
+                        }
+                      >
+                        <option value="no">None / Rare</option>
+                        <option value="yes">Occasional / Regular</option>
+                      </select>
+                    </div>
+                    <div className="col-span-1">
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Exercise Level
+                      </label>
+                      <select
+                        className="input w-full"
+                        style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.1)" }}
+                        value={lifestyle.exercise}
+                        onChange={(e) =>
+                          setLifestyle((s) => ({
+                            ...s,
+                            exercise: e.target.value,
+                          }))
+                        }
+                      >
+                        <option value="low">Low (Sedentary)</option>
+                        <option value="medium">Moderate (2-3x/week)</option>
+                        <option value="high">High (Active)</option>
+                      </select>
+                    </div>
+                    <div className="col-span-1">
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Diet Type
+                      </label>
+                      <select
+                        className="input w-full"
+                        style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.1)" }}
+                        value={lifestyle.diet}
+                        onChange={(e) =>
+                          setLifestyle((s) => ({ ...s, diet: e.target.value }))
+                        }
+                      >
+                        <option value="balanced">Balanced</option>
+                        <option value="veg">Vegetarian</option>
+                        <option value="non-veg">Non-vegetarian</option>
+                        <option value="high-fat">High Fat</option>
+                        <option value="junk">Processed / Fast Food</option>
+                      </select>
+                    </div>
+                    <div className="col-span-1">
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Stress Level
+                      </label>
+                      <select
+                        className="input w-full"
+                        style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.1)" }}
+                        value={lifestyle.stress_level}
+                        onChange={(e) =>
+                          setLifestyle((s) => ({
+                            ...s,
+                            stress_level: e.target.value,
+                          }))
+                        }
+                      >
+                        <option value="low">Low</option>
+                        <option value="medium">Moderate</option>
+                        <option value="high">High</option>
+                      </select>
+                    </div>
+                    <div className="col-span-1">
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Sleep Duration (Hours)
+                      </label>
+                      <input
+                        className="input w-full"
+                        style={{ background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.1)" }}
+                        type="number"
+                        min={0}
+                        max={24}
+                        value={lifestyle.sleep_hours}
+                        onChange={(e) =>
+                          setLifestyle((s) => ({
+                            ...s,
+                            sleep_hours: Number(e.target.value || 0),
+                          }))
+                        }
+                      />
                     </div>
                   </div>
                 </div>
               </details>
 
-              <details style={{ marginTop: 16 }}>
+              <details className="group">
                 <summary
                   style={{
                     fontSize: 18,
                     fontWeight: 700,
                     cursor: "pointer",
                     marginBottom: 16,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "12px 16px",
+                    background: "var(--surface)",
+                    borderRadius: "8px",
+                    border: "1px solid var(--border)",
+                    transition: "all 0.2s ease"
+                  }}
+                  className="hover:border-blue-500/50 hover:bg-slate-800/50"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="transform transition-transform duration-200 group-open:rotate-180">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M6 9l6 6 6-6"/>
+                      </svg>
+                    </div>
+                    <span>Current Symptoms</span>
+                  </div>
+                  <span style={{ fontSize: 14, color: "var(--text-secondary)", fontWeight: 400 }}>
+                    Select all that apply
+                  </span>
+                </summary>
+                
+                <div 
+                  style={{
+                    background: "rgba(30, 41, 59, 0.4)",
+                    backdropFilter: "blur(12px)",
+                    borderRadius: 12,
+                    padding: 24,
+                    border: "1px solid rgba(255, 255, 255, 0.08)",
+                    boxShadow: "0 4px 24px -1px rgba(0, 0, 0, 0.2)"
                   }}
                 >
-                  🩺 Current Symptoms
-                </summary>
-                <div className="row" style={{ marginTop: 16 }}>
-                  {Object.keys(symptoms).map((k) => (
-                    <div className="col" key={k}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {Object.keys(symptoms).map((k) => (
                       <label
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          cursor: "pointer",
-                        }}
+                        key={k}
+                        className="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors hover:bg-white/5 border border-transparent hover:border-white/10"
                       >
                         <input
                           type="checkbox"
+                          className="w-5 h-5 rounded border-gray-500 text-blue-600 focus:ring-blue-500 bg-gray-700"
                           checked={(symptoms as any)[k]}
                           onChange={(e) =>
                             setSymptoms((prev) => ({
@@ -1099,23 +1172,30 @@ export default function Upload() {
                             }))
                           }
                         />
-                        <span>{getUserFriendlySymptom(k)}</span>
+                        <span className="text-gray-200 select-none">
+                          {getUserFriendlySymptom(k)}
+                        </span>
                       </label>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </details>
 
               <div style={{ marginTop: 24 }}>
                 {task === "general" ? (
                   <button
-                    className="btn btn-success"
+                    className="w-full group relative overflow-hidden rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 p-[1px] transition-all duration-300 hover:shadow-lg hover:shadow-emerald-500/25 hover:scale-[1.02]"
                     onClick={() =>
                       navigate("/triage", { state: { reportData: result } })
                     }
                   >
-                    <span style={{ marginRight: 8 }}>💡</span>
-                    Get Personalized Health Advice
+                    <div className="relative flex items-center justify-center gap-3 bg-slate-900/50 backdrop-blur-sm px-6 py-4 rounded-[11px] transition-all duration-300 group-hover:bg-transparent">
+                      <span className="text-2xl">💡</span>
+                      <span className="font-bold text-white text-lg">Get Personalized Health Advice</span>
+                      <svg className="w-5 h-5 text-white/70 transition-transform duration-300 group-hover:translate-x-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                      </svg>
+                    </div>
                   </button>
                 ) : (
                   <button
@@ -1154,15 +1234,26 @@ export default function Upload() {
               <div className="card" style={{ marginTop: 24 }}>
                 <div style={{ marginTop: 24 }}>
                   <button
-                    className="btn btn-success"
+                    className="w-full group relative overflow-hidden rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 p-[1px] transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/25 hover:scale-[1.02]"
                     onClick={onGetAdvice}
                     disabled={loading}
                   >
-                    {loading ? (
-                      <span>🔄 Opening AI Health Assistant...</span>
-                    ) : (
-                      <span>💬 Get Personalized Health Advice</span>
-                    )}
+                    <div className="relative flex items-center justify-center gap-3 bg-slate-900/50 backdrop-blur-sm px-6 py-4 rounded-[11px] transition-all duration-300 group-hover:bg-transparent">
+                      {loading ? (
+                        <>
+                          <span className="loading-spinner"></span>
+                          <span className="font-bold text-white text-lg">Opening AI Health Assistant...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-2xl">💬</span>
+                          <span className="font-bold text-white text-lg">Get Personalized Health Advice</span>
+                          <svg className="w-5 h-5 text-white/70 transition-transform duration-300 group-hover:translate-x-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M5 12h14M12 5l7 7-7 7"/>
+                          </svg>
+                        </>
+                      )}
+                    </div>
                   </button>
                 </div>
               </div>
@@ -1180,187 +1271,214 @@ export default function Upload() {
                 </div>
               )}
 
-              {/* Extracted Values Toggle - Main toggle for all extracted values */}
-              <details
-                open={showExtractedValues}
-                onToggle={(e) =>
-                  setShowExtractedValues((e.target as HTMLDetailsElement).open)
-                }
-                style={{ marginBottom: 16 }}
-              >
-                <summary
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    marginBottom: 16,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <span>📊 Extracted Medical Values</span>
-                  <span
-                    style={{
-                      fontSize: 14,
-                      fontWeight: 400,
-                      color: "var(--text-secondary)",
-                    }}
-                  >
-                    {Object.keys(extractedMeta).length} values found
-                  </span>
-                </summary>
 
-                <div
-                  style={{
-                    background: "var(--surface)",
-                    borderRadius: 8,
-                    padding: 16,
-                    border: "1px solid var(--border)",
-                  }}
-                >
-                  {/* Confirmation Banner - Only show if confirmation is required and not confirmed */}
-                  {requireConfirmation && !confirmedExtracted && (
-                    <div
+              {/* Extracted Report Text - Card-based layout with ranges */}
+              {Object.keys(extractedMeta).length > 0 && (
+                <details className="group" open style={{ marginTop: 16 }}>
+                  <summary
+                    style={{
+                      fontSize: 18,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      marginBottom: 16,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "12px 16px",
+                      background: "var(--surface)",
+                      borderRadius: "8px",
+                      border: "1px solid var(--border)",
+                      transition: "all 0.2s ease"
+                    }}
+                    className="hover:border-blue-500/50 hover:bg-slate-800/50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="transform transition-transform duration-200 group-open:rotate-180">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M6 9l6 6 6-6"/>
+                        </svg>
+                      </div>
+                      <span>📊 Extracted Medical Values</span>
+                    </div>
+                    <span
                       style={{
-                        background: "rgba(59, 130, 246, 0.1)",
-                        border: "1px solid var(--primary)",
-                        borderRadius: 6,
-                        padding: 12,
-                        marginBottom: 16,
+                        fontSize: 14,
+                        fontWeight: 500,
+                        color: "var(--text-secondary)",
+                        background: "rgba(255,255,255,0.05)",
+                        padding: "4px 10px",
+                        borderRadius: "20px"
                       }}
                     >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          flexWrap: "wrap",
-                          gap: 8,
-                        }}
-                      >
-                        <span style={{ color: "var(--primary-light)" }}>
-                          🔍 Please review the extracted values before
-                          proceeding
-                        </span>
-                        <button
-                          className="btn btn-primary"
-                          onClick={confirmExtractedValues}
-                          style={{ padding: "6px 12px", fontSize: 14 }}
+                      {Object.keys(extractedMeta).length} values
+                    </span>
+                  </summary>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" style={{ marginTop: 16 }}>
+                    {Object.keys(extractedMeta).map((key) => {
+                      const meta = extractedMeta[key];
+                      const isAbnormal = outOfRange?.includes(key);
+                      const range = getReferenceRange(key, task);
+                      
+                      return (
+                        <div
+                          key={key}
+                          className={`relative overflow-hidden rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] ${
+                            isAbnormal 
+                              ? "bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/30" 
+                              : "bg-slate-800/50 border border-slate-700/50"
+                          }`}
+                          style={{
+                            animation: isAbnormal ? "pulse-yellow 2s ease-in-out infinite" : "none"
+                          }}
                         >
-                          Confirm Values
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Extracted Values Grid */}
-                  <div className="extracted-values-grid">
-                    {Object.entries(extractedMeta).map(([key, meta]) => (
-                      <div
-                        key={key}
-                        className={`extracted-value-card ${
-                          outOfRange?.includes(key) ? "out-of-range" : ""
-                        }`}
-                      >
-                        <div className="extracted-value-header">
-                          <span className="extracted-value-label">
-                            {getUserFriendlyLabel(key)}
-                          </span>
-                          {outOfRange?.includes(key) && (
-                            <span className="extracted-value-warning">⚠️</span>
+                          {isAbnormal && (
+                            <div className="absolute top-2 right-2">
+                              <span className="bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded text-xs font-medium border border-yellow-500/30">
+                                Out of Range
+                              </span>
+                            </div>
                           )}
-                        </div>
-                        <div className="extracted-value-content">
-                          <span className="extracted-value-data">
-                            {formatDisplayValue(key, meta.value, task)}{" "}
-                            {meta.unit}
-                          </span>
-                          <span className="extracted-value-confidence">
-                            {meta.confidence
-                              ? `${(meta.confidence * 100).toFixed(0)}%`
-                              : "N/A"}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                          
+                          <div className="mb-3">
+                            <span className="text-gray-300 font-semibold text-sm block">
+                              {getUserFriendlyLabel(key)}
+                            </span>
+                          </div>
+                          
+                          <div className="mb-3">
+                            <span className={`text-3xl font-bold tracking-tight ${isAbnormal ? "text-yellow-400" : "text-white"}`}>
+                              {formatDisplayValue(key, meta.value, task)}
+                            </span>
+                            {meta.unit && (
+                              <span className="text-sm text-gray-400 font-normal ml-2">
+                                {meta.unit}
+                              </span>
+                            )}
+                          </div>
 
-                  {/* Action Buttons */}
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      justifyContent: "flex-end",
-                    }}
-                  >
-                    {requireConfirmation && confirmedExtracted && (
-                      <button
-                        className="btn btn-secondary"
-                        onClick={reviewExtractedValues}
-                        style={{ padding: "6px 12px", fontSize: 14 }}
-                      >
-                        Review Again
-                      </button>
-                    )}
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => setShowExtractedValues(false)}
-                      style={{ padding: "6px 12px", fontSize: 14 }}
-                    >
-                      Hide Values
-                    </button>
-                  </div>
-                </div>
-              </details>
+                          {range && (
+                            <div className="mb-2 p-2 bg-slate-900/50 rounded-lg">
+                              <span className="text-xs text-gray-400 block mb-1">Reference Range:</span>
+                              <span className="text-xs text-gray-300 font-medium">
+                                {range.min} - {range.max} {meta.unit || ""}
+                              </span>
+                            </div>
+                          )}
 
-              {/* Optional: Confirmation Status */}
-              {requireConfirmation && confirmedExtracted && (
-                <div
-                  style={{
-                    background: "rgba(16, 185, 129, 0.1)",
-                    border: "1px solid var(--success)",
-                    borderRadius: 6,
-                    padding: 8,
-                    marginBottom: 16,
-                    textAlign: "center",
-                  }}
-                >
-                  <span style={{ color: "var(--success)", fontSize: 14 }}>
-                    ✅ Extracted values confirmed
-                  </span>
-                </div>
+                          <div className="text-xs text-gray-500 leading-relaxed mt-2">
+                            {getDescriptionForKey(key)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </details>
               )}
+
+              {/* Extracted Report Text - All extracted values from report */}
+              {(rawText || (allExtracted && Object.keys(allExtracted).length > 0)) && (
+                <details className="group" style={{ marginTop: 16 }}>
+                  <summary
+                    style={{
+                      fontSize: 18,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      marginBottom: 16,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "12px 16px",
+                      background: "var(--surface)",
+                      borderRadius: "8px",
+                      border: "1px solid var(--border)",
+                      transition: "all 0.2s ease"
+                    }}
+                    className="hover:border-blue-500/50 hover:bg-slate-800/50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="transform transition-transform duration-200 group-open:rotate-180">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M6 9l6 6 6-6"/>
+                        </svg>
+                      </div>
+                      <span>📄 Extracted Report Text</span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 500,
+                        color: "var(--text-secondary)",
+                        background: "rgba(255,255,255,0.05)",
+                        padding: "4px 10px",
+                        borderRadius: "20px"
+                      }}
+                    >
+                      {allExtracted ? Object.keys(allExtracted).length : 0} values
+                    </span>
+                  </summary>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" style={{ marginTop: 16 }}>
+                    {allExtracted && Object.keys(allExtracted).map((key) => {
+                      // Handle tuple format (value, unit) or direct value
+                      const valData = allExtracted[key];
+                      let value = valData;
+                      let unit = "";
+                      
+                      if (Array.isArray(valData) && valData.length >= 1) {
+                        value = valData[0];
+                        if (valData.length >= 2) unit = valData[1];
+                      }
+
+                      const range = getReferenceRange(key, task);
+                      
+                      return (
+                        <div
+                          key={key}
+                          className="relative overflow-hidden rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] bg-slate-800/50 border border-slate-700/50"
+                        >
+                          <div className="mb-3">
+                            <span className="text-gray-300 font-semibold text-sm block">
+                              {getUserFriendlyLabel(key)}
+                            </span>
+                          </div>
+                          
+                          <div className="mb-3">
+                            <span className="text-3xl font-bold tracking-tight text-white">
+                              {formatDisplayValue(key, value, task)}
+                            </span>
+                            {unit && (
+                              <span className="text-sm text-gray-400 font-normal ml-2">
+                                {unit}
+                              </span>
+                            )}
+                          </div>
+
+                          {range && (
+                            <div className="mb-2 p-2 bg-slate-900/50 rounded-lg">
+                              <span className="text-xs text-gray-400 block mb-1">Reference Range:</span>
+                              <span className="text-xs text-gray-300 font-medium">
+                                {range.min} - {range.max} {unit || ""}
+                              </span>
+                            </div>
+                          )}
+
+                          <div className="text-xs text-gray-500 leading-relaxed mt-2">
+                            {getDescriptionForKey(key)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </details>
+              )}
+
+
+
             </div>
           )}
 
-          {/* Extracted Report Text Toggle - Moved below the main values display */}
-          {rawText && (
-            <details style={{ marginTop: 16 }}>
-              <summary
-                style={{
-                  fontSize: 18,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  marginBottom: 16,
-                }}
-              >
-                🗂 Extracted Report Text
-              </summary>
-              <pre
-                style={{
-                  whiteSpace: "pre-wrap",
-                  background: "var(--bg-muted)",
-                  padding: 12,
-                  borderRadius: 8,
-                  maxHeight: 300,
-                  overflow: "auto",
-                }}
-              >
-                {rawText || "No text available"}
-              </pre>
-            </details>
-          )}
+
         </>
       )}
     </>

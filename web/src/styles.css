@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root{
   --primary:#3b82f6;
   --primary-dark:#2563eb;
@@ -797,3 +801,14 @@ body::before{
     height:20px;
   }
 }
+
+/* Yellow Pulse Animation for Out-of-Range Values */
+@keyframes pulse-yellow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 20px 8px rgba(234, 179, 8, 0.2);
+  }
+}
+

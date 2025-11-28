@@ -45,7 +45,9 @@ export default function History() {
       const stored = localStorage.getItem('latest_result')
       if (stored) {
         const data = JSON.parse(stored)
-        setLatest(data)
+        if (data && data.task) {
+          setLatest(data)
+        }
       }
     } catch (error) {
       console.error('Error loading health data:', error)
@@ -79,7 +81,7 @@ export default function History() {
       case 'diabetes': return 'Diabetes Assessment'
       case 'parkinsons': return 'Neurological Health'
       case 'general': return 'General Health'
-      default: return task.charAt(0).toUpperCase() + task.slice(1)
+      default: return (task || 'Unknown').charAt(0).toUpperCase() + (task || 'Unknown').slice(1)
     }
   }
 
@@ -207,9 +209,6 @@ export default function History() {
         <div className="max-w-2xl mx-auto">
           <div className="card assessment-card rounded-2xl p-6">
             <div className="text-center mb-6">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-blue-50 flex items-center justify-center">
-                {getTaskIcon(latest.task)}
-              </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">{getTaskLabel(latest.task)}</h2>
               <p className="text-gray-500">Latest Assessment</p>
             </div>
@@ -232,34 +231,21 @@ export default function History() {
                 Consult Dr. Intelligence
               </button>
               <button
-                onClick={async () => {
-                  // Analyze the latest assessment
-                  try {
-                    const token = await getAccessToken()
-                    const features = latest.features || {}
-                    const task = (latest.task || 'general') as Task
-                    if (task !== 'general' && latest.prediction) {
-                      // Already has prediction, just navigate to triage with existing data
-                      navigate('/triage', { state: { reportData: latest } })
-                    } else if (task !== 'general') {
-                      // Get new prediction
-                      const pred = await predictWithFeatures(task, features, latest.prediction_id, token)
-                      const updatedLatest = {
-                        ...latest,
-                        prediction: { label: pred.label, probability: pred.probability, health_score: pred.health_score },
-                        prediction_id: pred.prediction_id
+                onClick={() => {
+                  navigate('/upload', {
+                    state: {
+                      report: {
+                        id: (latest as any).prediction_id || 'latest',
+                        task: latest.task,
+                        features: latest.features,
+                        prediction: latest.prediction,
+                        extracted_text: (latest as any).extracted_text,
+                        highlights: (latest as any).highlights,
+                        lifestyle: latest.lifestyle,
+                        symptoms: latest.symptoms
                       }
-                      localStorage.setItem('latest_result', JSON.stringify(updatedLatest))
-                      navigate('/triage', { state: { reportData: updatedLatest } })
-                    } else {
-                      // General mode - navigate directly
-                      navigate('/triage', { state: { reportData: latest } })
                     }
-                  } catch (error) {
-                    console.error('Error analyzing latest assessment:', error)
-                    // Fallback: just navigate to triage with existing data
-                    navigate('/triage', { state: { reportData: latest } })
-                  }
+                  })
                 }}
                 className="btn btn-secondary"
               >
@@ -288,7 +274,20 @@ export default function History() {
                 <button
                   className="btn btn-secondary"
                   onClick={()=>{
-                    navigate('/upload', { state: { report: r } })
+                    // Explicitly map to ensure extracted_text is passed
+                    navigate('/upload', { 
+                      state: { 
+                        report: {
+                          id: r.id,
+                          task: r.task,
+                          features: r.extracted,
+                          extracted_text: r.rawOCR?.text || '',
+                          extractedMeta: r.extractedMeta,
+                          highlights: Object.entries(r.extractedMeta||{}).filter(([_,v]: any)=>v?.out_of_range).map(([k]: any)=>k),
+                          missingFields: r.missingFields
+                        } 
+                      } 
+                    })
                   }}
                 >
                   Analyze
